@@ -1,0 +1,18 @@
+#ifndef _ULTRASONIC_H
+#define _ULTRASONIC_H
+#include "stm32f1xx_hal.h"
+
+extern uint16_t Distance1,Distance2,Distance3,Distance4;
+extern uint16_t TIM2CH1_CAPTURE_STA,TIM2CH1_CAPTURE_VAL;
+extern uint16_t TIM2CH2_CAPTURE_STA,TIM2CH2_CAPTURE_VAL;
+extern uint16_t TIM2CH3_CAPTURE_STA,TIM2CH3_CAPTURE_VAL;
+extern uint16_t TIM2CH4_CAPTURE_STA,TIM2CH4_CAPTURE_VAL;
+
+extern uint16_t Distance5,Distance6,Distance7,Distance8;
+extern uint16_t TIM3CH1_CAPTURE_STA,TIM3CH1_CAPTURE_VAL;
+extern uint16_t TIM3CH2_CAPTURE_STA,TIM3CH2_CAPTURE_VAL;
+extern uint16_t TIM3CH3_CAPTURE_STA,TIM3CH3_CAPTURE_VAL;
+extern uint16_t TIM3CH4_CAPTURE_STA,TIM3CH4_CAPTURE_VAL;
+
+#endif
+

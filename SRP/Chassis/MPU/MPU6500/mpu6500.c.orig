@@ -1,0 +1,241 @@
+#include "mpu6500.h"
+int16_t accel_x,accel_y,accel_z,groy_x,groy_y,groy_z;
+MPU_value mpu_value;
+unsigned char BUF[6];       //接收数据缓存区 
+uint8_t mpu6500_buf[20];
+void Init_MPU6500(void)
+{
+		if( MPU6500_Read_Reg(WHO_AM_I)== 0x70)			//正确读取到6500的地址
+	{		
+		uint8_t flag[20]={0};
+		HAL_Delay(100);
+		MPU6500_Write_Reg(PWR_MGMT_1,0X80);   		//电源管理,复位MPU6500
+		HAL_Delay(100);
+		//printf();
+		flag[0]=MPU6500_Read_Reg(PWR_MGMT_1);
+		
+		MPU6500_Write_Reg(0X68,0X07);//陀螺仪、加速度计、温度计复位
+		HAL_Delay(100);
+		flag[1]=MPU6500_Read_Reg(0X68);
+		MPU6500_Write_Reg(PWR_MGMT_1,0X01);   		//选择时钟源
+		
+		HAL_Delay(100);
+		flag[2]=MPU6500_Read_Reg(PWR_MGMT_1);
+		MPU6500_Write_Reg(USER_CTRL,0X30);  
+		HAL_Delay(100);
+		flag[3]=MPU6500_Read_Reg(USER_CTRL);
+		MPU6500_Write_Reg(SMPLRT_DIV,0X00);				//采样率1000/(1+0)=1000HZ
+		HAL_Delay(100);
+		flag[4]=MPU6500_Read_Reg(SMPLRT_DIV);
+		MPU6500_Write_Reg(GYRO_CONFIG,0X10);  		//陀螺仪测量范围 0X10 正负1000度
+		HAL_Delay(100);
+		flag[5]=MPU6500_Read_Reg(GYRO_CONFIG);
+		MPU6500_Write_Reg(CONFIG,0X04);						//低通滤波器 0x02 20hz (9.9ms delay) fs=1khz
+		HAL_Delay(100);
+		flag[6]=MPU6500_Read_Reg(CONFIG);
+		MPU6500_Write_Reg(ACCEL_CONFIG,0x10); 		//加速度计测量范围 0X10 正负8g
+		HAL_Delay(100);
+		flag[7]=MPU6500_Read_Reg(ACCEL_CONFIG);
+		MPU6500_Write_Reg(0X1D,0x04);		//加速度计速率1khz 滤波器20hz (99.8ms delay)
+		HAL_Delay(100);
+		flag[8]=MPU6500_Read_Reg(0X1D);
+		MPU6500_Write_Reg(PWR_MGMT_2,0X00);   		//使能加速度计和陀螺仪
+		flag[9]=MPU6500_Read_Reg(PWR_MGMT_2);
+		flag[10]=MPU6500_Read_Reg(0X6A);
+		flag[11]=0x12;
+		SPI5_Read_Write_Byte(0xff);//启动传输
+	}
+	else {;}
+		
+}
+void MPU6500_Write_Reg(uint8_t reg,uint8_t value)
+{
+		uint8_t temp1=reg&0x7f,temp2=value;
+		spi_CS=0;
+		//HAL_SPI_Transmit(hspiX,&temp1,1,100);
+		//HAL_SPI_Transmit(hspiX,&temp2,1,100);
+		HAL_SPI_TransmitReceive(hspiX,&temp1,&temp1,1,100);
+		HAL_SPI_TransmitReceive(hspiX,&value,&value,1,100);
+		//HAL_SPI_Receive(hspiX,Rdata,1,100);
+		spi_CS=1;
+}
+//---------------------------------------------------------------//
+//SPI读取
+//reg: addr
+uint8_t MPU6500_Read_Reg(uint8_t reg)
+{
+	  uint8_t reg_val=reg|0x80;
+		spi_CS=0;//	MPU9250_CS=0;  //片选MPU9250
+		//HAL_Delay(1);
+	  HAL_SPI_Transmit(hspiX,&reg_val,1,100); //reg地址+读命令
+	  reg_val=0xff;
+		HAL_SPI_Receive(hspiX,&reg_val,1,100);//任意数据
+		spi_CS=1;//	MPU9250_CS=1;  //失能MPU9250
+	return	reg_val;
+}
+static uint8_t spi_Mag_read(uint8_t reg)
+{
+		uint8_t data;
+
+		MPU6500_Write_Reg(MPU6500_I2C_SLV4_REG, reg|0x80);
+		//delay_ms(10);
+		MPU6500_Write_Reg(MPU6500_I2C_SLV4_CTRL, 0x80);
+		//delay_ms(10);
+		data = MPU6500_Read_Reg(MPU6500_I2C_SLV4_DI);
+		MPU6500_Write_Reg(MPU6500_I2C_SLV4_CTRL, 0x00);
+		//delay_ms(10);
+		return data;
+}
+static void spi_Mag_write(uint8_t reg,uint8_t value)
+{
+	//u16 j=500;
+	MPU6500_Write_Reg(I2C_SLV0_ADDR ,MPU9250_AK8963_ADDR);//设置磁力计地址,mode: write
+	MPU6500_Write_Reg(I2C_SLV0_REG ,reg);//set reg addr
+	MPU6500_Write_Reg(I2C_SLV0_DO ,value);//send value	
+	//while(j--);//此处因为MPU内部I2C读取速度较慢，延时等待内部写完毕
+}
+//void READ_MPU6500_ACCEL(void)
+//{ 
+//   BUF[0]=MPU6500_Read_Reg(ACCEL_XOUT_L); 
+//   BUF[1]=MPU6500_Read_Reg(ACCEL_XOUT_H);
+//   mpu_value.Accel[0]=	(BUF[1]<<8)|BUF[0];
+//	 accel_x=mpu_value.Accel[0];
+////   mpu_value.Accel[0]/=164; 						   //读取计算X轴数据
+//   BUF[2]=MPU6500_Read_Reg(ACCEL_YOUT_L);
+//   BUF[3]=MPU6500_Read_Reg(ACCEL_YOUT_H);
+//   mpu_value.Accel[1]=	(BUF[3]<<8)|BUF[2];
+//	 accel_y=mpu_value.Accel[1];
+////   mpu_value.Accel[1]/=164; 						   //读取计算Y轴数据
+//   BUF[4]=MPU6500_Read_Reg(ACCEL_ZOUT_L); 
+//   BUF[5]=MPU6500_Read_Reg(ACCEL_ZOUT_H);
+//   mpu_value.Accel[2]=  (BUF[5]<<8)|BUF[4];
+//	accel_z=mpu_value.Accel[2];
+////   mpu_value.Accel[2]/=164; 					      //读取计算Z轴数据 
+//}
+
+///**********************陀螺仪读取*****************************/
+//void READ_MPU6500_GYRO(void)
+//{ 
+//   BUF[0]=MPU6500_Read_Reg(GYRO_XOUT_L); 
+//   BUF[1]=MPU6500_Read_Reg(GYRO_XOUT_H);
+//   mpu_value.Gyro[0]=	(BUF[1]<<8)|BUF[0];
+//	groy_x= mpu_value.Gyro[0];
+////   mpu_value.Gyro[0]/=16.4; 						   //读取计算X轴数据
+
+//   BUF[2]=MPU6500_Read_Reg(GYRO_YOUT_L);
+//   BUF[3]=MPU6500_Read_Reg(GYRO_YOUT_H);
+//   mpu_value.Gyro[1]=	(BUF[3]<<8)|BUF[2];
+//	groy_y=mpu_value.Gyro[1];
+////   mpu_value.Gyro[1]/=16.4; 						   //读取计算Y轴数据
+//   BUF[4]=MPU6500_Read_Reg(GYRO_ZOUT_L);
+//   BUF[5]=MPU6500_Read_Reg(GYRO_ZOUT_H);
+//   mpu_value.Gyro[2]=	(BUF[5]<<8)|BUF[4];
+//	groy_z=mpu_value.Gyro[2];
+//	
+////   mpu_value.Gyro[2]/=16.4; 					       //读取计算Z轴数?
+//}
+
+/**********************磁力计读取***************************/
+//i2c_Mag_read(AK8963_ST2_REG) 此步读取不可省略
+//数据读取结束寄存器，reading this register means data reading end
+//AK8963_ST2_REG 同时具有数据非正常溢出检测功能
+//详情参考 MPU9250 PDF
+/**********************************************************/
+//void READ_MPU6500_MAG(void)
+//{ 	
+//		 //读取计算X轴数据
+//		 BUF[0]=spi_Mag_read(IST8310_R_XL ); //Low data	
+//		 BUF[1]=spi_Mag_read(IST8310_R_XM); //High data	
+//		 mpu_value.Mag[0]=(BUF[1]<<8)|BUF[0];		//灵敏度纠正 公式见/RM-MPU-9250A-00 PDF/ 5.13	
+//		 
+//		 BUF[2]=spi_Mag_read(IST8310_R_YL); //Low data	
+//		 BUF[3]=spi_Mag_read(IST8310_R_YM); //High data	
+//		  mpu_value.Mag[1]=((BUF[3]<<8)|BUF[2]);	
+//		 
+//		//读取计算Z轴数据
+//		 BUF[4]=spi_Mag_read(IST8310_R_ZL); //Low data	
+//		 BUF[5]=spi_Mag_read(IST8310_R_ZM); //High data	
+//		 mpu_value.Mag[2]=((BUF[5]<<8)|BUF[4]);				       
+//}
+short Read_MPU6500(void)
+{
+		uint8_t T[2]={0x41,0};
+		short	raw;
+		float temp;
+		T[0]=MPU6500_Read_Reg(0x41);
+		T[1]=MPU6500_Read_Reg(0x42);
+		raw=((uint16_t)T[0]<<8)|T[1];
+		//printf("\nraw=%d\n",raw);
+		temp=36.53+((double)raw)/340; 
+
+		return temp*100;
+}
+/*
+ * 函数名：SPI1_Read_Write_Byte
+ * 描述  ：读写一个字节
+ * 输入  ：TxData:要写入的字节
+ * 输出  ：读取到的字节
+ */ 
+uint8_t SPI5_Read_Write_Byte(uint8_t TxData)
+{		
+	uint8_t retry = 0;				 	
+	while (__HAL_SPI_GET_FLAG(hspiX, SPI_FLAG_TXE) == RESET) 	//检查指定的SPI标志位设置与否:发送缓存空标志位
+		{
+		retry++;
+		if(retry > 250)	return 0;
+		}			  
+	hspiX->Instance->DR=TxData; 																//通过外设SPIx发送一个数据
+	retry = 0;
+
+	while (__HAL_SPI_GET_FLAG(hspiX, SPI_FLAG_RXNE) == RESET) //检查指定的SPI标志位设置与否:接受缓存非空标志位
+	{
+		retry++;
+		if(retry > 250) return 0;
+	}	  						    
+	return hspiX->Instance->DR; 															//返回通过SPIx最近接收的数据					    
+}
+/**
+  * @brief 读取加速度计陀螺仪的原始数据
+  * @param None
+  * @retval None
+  */
+void MPU6500_ReadValueRaw(void)
+{
+	uint8_t i;
+	int b[6];
+	spi_CS=0; 																	//使能SPI传输
+
+	SPI5_Read_Write_Byte(ACCEL_XOUT_H|0x80); 				//从加速度计的寄存器开始进行读取陀螺仪和加速度计的值//发送读命令+寄存器号
+	
+	for(i	=	0;i	<	14;i++)														//一共读取14字节的数据
+	{
+		mpu6500_buf[i]	=	SPI5_Read_Write_Byte(0xff);	//输入0xff,因为slave不识别
+	}	
+	//,,,,,
+		accel_x = BYTE16(uint16_t, mpu6500_buf[0],  mpu6500_buf[1]);
+		accel_y = BYTE16(uint16_t, mpu6500_buf[2],  mpu6500_buf[3]);
+		accel_z = BYTE16(uint16_t, mpu6500_buf[4],  mpu6500_buf[5]);
+		groy_x = BYTE16(uint16_t, mpu6500_buf[8],  mpu6500_buf[9]);
+		groy_y = BYTE16(uint16_t, mpu6500_buf[10],  mpu6500_buf[11]);
+		groy_z = BYTE16(uint16_t, mpu6500_buf[12],  mpu6500_buf[13]);
+//		b[0]=MPU6500_Acc_Raw.x;
+//		b[1]=MPU6500_Acc_Raw.y;
+//		b[2]=MPU6500_Acc_Raw.z;
+//		b[3]=MPU6500_Gyro_Raw.x;
+//		b[4]=MPU6500_Gyro_Raw.y;
+//		b[5]=MPU6500_Gyro_Raw.z;
+		//printf("\nMPU6500_Acc_Raw.x=%d\n",b[0]);
+	
+//		printf("\nMPU6500_Acc_Raw.x=%d\n",b);
+//		
+//		printf("\nMPU6500_Acc_Raw.x=%d\n",b);
+//		
+//		mpu6500_tempreature_temp	=	BYTE16(s16, mpu6500_buf[6],  mpu6500_buf[7]);
+//		mpu6500_tempreature	=	(float)(35000+((521+mpu6500_tempreature_temp)*100)/34); // 原来分母为340，现在分子*100，即：扩大1000倍；
+//		mpu6500_tempreature = mpu6500_tempreature/1000;                             
+	
+	
+	spi_CS=1;  	    //禁止SPI传输
+}
+
+

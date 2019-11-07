@@ -1,0 +1,139 @@
+#include"user_can.h"
+CAN_HandleTypeDef* user_canX;
+CanTxMsgTypeDef TxMsg;
+CanRxMsgTypeDef	RxMsg;
+/*
+初始化Can
+
+
+*/
+void Init_CAN_TX_RX(CAN_HandleTypeDef* hcan)
+{
+    user_canX = hcan; //获取到can指针用于以后方便配置
+    Set_CAN_Filter();//配置筛选器
+    TxMsg.StdId = 0x204; //设置id
+    TxMsg.IDE = CAN_ID_STD; //选择标准id
+    TxMsg.RTR = 0x00; //0为数据帧，1为远程帧
+    TxMsg.DLC = 8; //设置数据长度为8个字节
+    TxMsg.Data[0] = 0x00; //发送数据位都清零
+    TxMsg.Data[1] = 0x00;
+    TxMsg.Data[2] = 0x00;
+    TxMsg.Data[3] = 0x00;
+    TxMsg.Data[4] = 0x00;
+    TxMsg.Data[5] = 0x00;
+    TxMsg.Data[6] = 0x00;
+    TxMsg.Data[7] = 0x00;
+    user_canX->pTxMsg = &TxMsg; //
+
+
+
+    RxMsg.Data[0] = 0x00; //接收数据位都清零
+    RxMsg.Data[1] = 0x00;
+    RxMsg.Data[2] = 0x00;
+    RxMsg.Data[3] = 0x00;
+    RxMsg.Data[4] = 0x00;
+    RxMsg.Data[5] = 0x00;
+    RxMsg.Data[6] = 0x00;
+    RxMsg.Data[7] = 0x00;
+    user_canX->pRxMsg = &RxMsg;
+
+}
+/*
+配置过滤器
+
+*/
+/*
+*	CAN 过滤器初始化：
+*
+*	初始化过滤器 2
+*	标识符屏蔽位模式
+*	使用 1 个 32 位过滤器
+*	过滤器标识符为 (0x00AA << 5)
+*	过滤器屏蔽标识符 0xFFFF
+*	过滤器 FIFO0 指向过滤器 0
+*	使能过滤器
+*/
+void Set_CAN_Filter(void)
+{
+    CAN_FilterConfTypeDef can_filter_1;
+    can_filter_1.FilterNumber = 0; //筛选器0
+    can_filter_1.BankNumber = 0; //
+    can_filter_1.FilterScale = CAN_FILTERSCALE_32BIT; //使用 1 个 32 位过滤器
+    can_filter_1.FilterIdHigh = 0x2040; //过滤器标识符为0x2040
+    can_filter_1.FilterIdLow = 0x0000;
+    can_filter_1.FilterMaskIdHigh = 0x0000; //过滤器屏蔽标识符 0x0000
+    can_filter_1.FilterMaskIdLow = 0x0000;
+    can_filter_1.FilterMode = CAN_FILTERMODE_IDMASK; //标识符屏蔽位模式
+    can_filter_1.FilterFIFOAssignment = CAN_FILTER_FIFO0; //过滤器 FIFO0 指向筛选器0
+    can_filter_1.FilterActivation = ENABLE; //使能筛选器0
+
+    HAL_CAN_ConfigFilter(user_canX, &can_filter_1);
+}
+/*
+
+作用：获取相应id的信息
+参数：id范围为1到8
+返回：0x01 id超出范围  0x00 id设置正确
+*/
+u8 Set_C620_Message(u8 id)
+{
+    if(id > 8 && id < 1)
+    {
+        TxMsg.StdId = 0x00; //0~0x7ff设置出错后id设置成无效，以防电机发生不可预料的事
+        user_canX->pTxMsg = &TxMsg;
+        return 0x01;
+    }
+    TxMsg.StdId = 0x200 + id;
+    user_canX->pTxMsg = &TxMsg;
+		if(HAL_CAN_Transmit(&hcan1,2000)!=HAL_OK)
+			{
+				printf("发送失败\n");//HAL_CAN_ConfigFilter
+			}
+    return 0x00;
+}
+/*
+设置四组电机电流信息
+*/
+u8 Set_C620_Current_Message(uint16_t Motor_Id, int Current_Value_1, int Current_Value_2, int Current_Value_3, int Current_Value_4)
+{
+    //CanTxMsgTypeDef TxMsg;
+
+    if((Motor_Id != L_Motor_Id) || (Motor_Id != H_Motor_Id))   		//id范围是否在1到8
+    {
+        TxMsg.StdId = 0x00; 																		//0~0x7ff设置出错后id设置成无效，以防电机发生不可预料的事
+        user_canX->pTxMsg = &TxMsg;
+        return 0x01;
+    }
+
+    TxMsg.StdId = Motor_Id; //0~0x7ff
+    //TxMsg.IDE=CAN_ID_STD;//选择标准id
+    //TxMsg.RTR=0x00;
+    //TxMsg.DLC=8;
+
+    TxMsg.Data[0] = ((Current_Value_1 >> 8) & 0x7F) | (IsNegative(Current_Value_1) << 8);
+    TxMsg.Data[1] = Current_Value_1 & 0xFF;
+    TxMsg.Data[2] = ((Current_Value_2 >> 8) & 0x7F) | (IsNegative(Current_Value_2) << 8);
+    TxMsg.Data[3] = Current_Value_2 & 0xFF;
+    TxMsg.Data[4] = ((Current_Value_3 >> 8) & 0x7F) | (IsNegative(Current_Value_3) << 8);
+    TxMsg.Data[5] = Current_Value_3 & 0xFF;
+    TxMsg.Data[6] = ((Current_Value_4 >> 8) & 0x7F) | (IsNegative(Current_Value_4) << 8);
+    TxMsg.Data[7] = Current_Value_4 & 0xFF;
+    user_canX->pTxMsg = &TxMsg;
+    return 0x00;
+}
+/*
+检查参数是否为负数
+返回： 0x01负数 0x00正数
+*/
+u8 IsNegative(int num)
+{
+    u8 flag = 0x00;
+    if(num < 0)
+    {
+        flag = 0x01;
+    }
+    return flag;
+}
+
+
+
