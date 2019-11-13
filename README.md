@@ -1,0 +1,4 @@
+# ElectronicDesign
+电子设计大赛训练代码
+F4标准库代码基于RC比赛代码修改
+F1的是HAL库，CobeMX生成基础代码
